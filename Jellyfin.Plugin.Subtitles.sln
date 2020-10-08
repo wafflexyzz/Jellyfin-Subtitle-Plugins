@@ -1,0 +1,55 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30523.141
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Jellyfin.Plugin.OpenSubtitles", "Jellyfin.Plugin.OpenSubtitles\Jellyfin.Plugin.OpenSubtitles.csproj", "{DCD0C8B9-A493-4A66-B8EE-8748D430B660}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenSubtitlesHandler", "OpenSubtitlesHandler\OpenSubtitlesHandler.csproj", "{A0EC3687-1E65-4E2C-913E-246BAB14D8F0}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Jellyfin.Plugin.Podnapisi", "Jellyfin.Plugin.Podnapisi\Jellyfin.Plugin.Podnapisi.csproj", "{D98416AF-E8CA-4AD5-A731-89B138E5B62E}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Jellyfin.Plugin.Addic7ed", "Jellyfin.Plugin.Addic7ed\Jellyfin.Plugin.Addic7ed.csproj", "{65CE1EC9-AC6C-4113-AE1A-A5AC913FFF3C}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Jellyfin.Plugin.TheSubDB", "Jellyfin.Plugin.TheSubDB\Jellyfin.Plugin.TheSubDB.csproj", "{3C60AB60-0C77-4277-8A3A-23AC3CD9E9C2}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Jellyfin.Plugin.Subscene", "Jellyfin.Plugin.Subscene\Jellyfin.Plugin.Subscene.csproj", "{DCDD8275-779F-4BDB-8CBE-3DA36BBBAC27}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{DCD0C8B9-A493-4A66-B8EE-8748D430B660}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DCD0C8B9-A493-4A66-B8EE-8748D430B660}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DCD0C8B9-A493-4A66-B8EE-8748D430B660}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DCD0C8B9-A493-4A66-B8EE-8748D430B660}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A0EC3687-1E65-4E2C-913E-246BAB14D8F0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A0EC3687-1E65-4E2C-913E-246BAB14D8F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A0EC3687-1E65-4E2C-913E-246BAB14D8F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A0EC3687-1E65-4E2C-913E-246BAB14D8F0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D98416AF-E8CA-4AD5-A731-89B138E5B62E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D98416AF-E8CA-4AD5-A731-89B138E5B62E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D98416AF-E8CA-4AD5-A731-89B138E5B62E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D98416AF-E8CA-4AD5-A731-89B138E5B62E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{65CE1EC9-AC6C-4113-AE1A-A5AC913FFF3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{65CE1EC9-AC6C-4113-AE1A-A5AC913FFF3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{65CE1EC9-AC6C-4113-AE1A-A5AC913FFF3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{65CE1EC9-AC6C-4113-AE1A-A5AC913FFF3C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3C60AB60-0C77-4277-8A3A-23AC3CD9E9C2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3C60AB60-0C77-4277-8A3A-23AC3CD9E9C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3C60AB60-0C77-4277-8A3A-23AC3CD9E9C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3C60AB60-0C77-4277-8A3A-23AC3CD9E9C2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DCDD8275-779F-4BDB-8CBE-3DA36BBBAC27}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DCDD8275-779F-4BDB-8CBE-3DA36BBBAC27}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DCDD8275-779F-4BDB-8CBE-3DA36BBBAC27}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DCDD8275-779F-4BDB-8CBE-3DA36BBBAC27}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {A8724A03-E042-4A9E-A0C7-4ED3D87C9DC3}
+	EndGlobalSection
+EndGlobal
