@@ -7,7 +7,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Jellyfin.Plugin.OpenSubtitles.Configuration;
 using MediaBrowser.Common.Extensions;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
@@ -15,8 +14,8 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.IO;
 using MediaBrowser.Model.Providers;
-using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
+using System.Net.Http;
 using OpenSubtitlesHandler;
 
 namespace Jellyfin.Plugin.OpenSubtitles
@@ -30,7 +29,7 @@ namespace Jellyfin.Plugin.OpenSubtitles
         private DateTime _lastLogin;
         private int _rateLimitLeft = 40;
 
-        public OpenSubtitleDownloader(ILogger<OpenSubtitleDownloader> logger, IFileSystem fileSystem, IHttpClient httpClient)
+        public OpenSubtitleDownloader(ILogger<OpenSubtitleDownloader> logger, IFileSystem fileSystem, HttpClient httpClient)
         {
             _logger = logger;
             _fileSystem = fileSystem;

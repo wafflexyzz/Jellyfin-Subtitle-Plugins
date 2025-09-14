@@ -7,6 +7,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,7 +16,6 @@ using System.Xml;
 using Jellyfin.Plugin.Addic7ed.Configuration;
 using MediaBrowser.Common;
 using MediaBrowser.Common.Extensions;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
@@ -23,9 +23,7 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Net;
 using MediaBrowser.Model.Providers;
-using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.Addic7ed
@@ -39,24 +37,19 @@ namespace Jellyfin.Plugin.Addic7ed
         private DateTime _lastRateLimitException;
         private DateTime _lastLogin;
         private int _rateLimitLeft = 40;
-        private readonly IHttpClient _httpClient;
+        private readonly HttpClient _httpClient;
         private readonly IApplicationHost _appHost;
         private ILocalizationManager _localizationManager;
       
         private readonly IServerConfigurationManager _config;
-
-        private readonly IJsonSerializer _json;
       
         private readonly string _baseUrl = "https://www.addic7ed.com";
      
-        public Addic7edDownloader(ILogger<Addic7edDownloader> logger, IHttpClient httpClient, IServerConfigurationManager config, IJsonSerializer json, IFileSystem fileSystem, ILocalizationManager localizationManager)
+        public Addic7edDownloader(ILogger<Addic7edDownloader> logger, HttpClient httpClient, IServerConfigurationManager config, IFileSystem fileSystem, ILocalizationManager localizationManager)
         {
             _logger = logger;
             _httpClient = httpClient;
-
-
             _config = config;
-            _json = json;
             _fileSystem = fileSystem;
             _localizationManager = localizationManager;
         }
@@ -122,15 +115,13 @@ namespace Jellyfin.Plugin.Addic7ed
             }
         }
 
-        private Task<HttpResponseInfo> GetResponse(string url, CancellationToken cancellationToken)
+        private async Task<HttpResponseMessage> GetResponse(string url, CancellationToken cancellationToken)
         {
-            return _httpClient.GetResponse(new HttpRequestOptions
-            {
-                Url = $"{_baseUrl}/{url}",
-                CancellationToken = cancellationToken,
-                Referer = _baseUrl,
-                UserAgent = "Mozilla/5.0 (Windows NT 10.0)"
-            });
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{_baseUrl}/{url}");
+            request.Headers.Add("Referer", _baseUrl);
+            request.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0)");
+            
+            return await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
 
         private async Task Login(CancellationToken cancellationToken)
@@ -165,33 +156,29 @@ namespace Jellyfin.Plugin.Addic7ed
 
             var formUrlEncodedContent = new FormUrlEncodedContent(contentData);
             var requestContentBytes = await formUrlEncodedContent.ReadAsStringAsync().ConfigureAwait(false);
-            using (var res = await _httpClient.Post(new HttpRequestOptions
+            using var request = new HttpRequestMessage(HttpMethod.Post, _baseUrl + "/dologin.php")
             {
-                Url = _baseUrl + "/dologin.php",
-                RequestContentType = "application/x-www-form-urlencoded",
-                RequestContent = requestContentBytes,
-                CancellationToken = cancellationToken,
-                Referer = _baseUrl
-            }).ConfigureAwait(false))
+                Content = new StringContent(requestContentBytes, System.Text.Encoding.UTF8, "application/x-www-form-urlencoded")
+            };
+            request.Headers.Add("Referer", _baseUrl);
+            
+            using (var res = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false))
             {
 
                 if (res.StatusCode == HttpStatusCode.OK)
                 {
-                    using (var reader = new StreamReader(res.Content))
+                    var content = await res.Content.ReadAsStringAsync().ConfigureAwait(false);
+                    if (content.Contains("User <b></b> doesn't exist"))
                     {
-                        var content = await reader.ReadToEndAsync().ConfigureAwait(false);
-                        if (content.Contains("User <b></b> doesn't exist"))
-                        {
-                            _logger.LogDebug("User doesn't exist");
-                            return;
-                        }
-                        if (content.Contains("Wrong password"))
-                        {
-                            _logger.LogDebug("Wrong password");
-                            return;
-                        }
-                        _logger.LogDebug($"{username} Logged in");
+                        _logger.LogDebug("User doesn't exist");
+                        return;
                     }
+                    if (content.Contains("Wrong password"))
+                    {
+                        _logger.LogDebug("Wrong password");
+                        return;
+                    }
+                    _logger.LogDebug($"{username} Logged in");
                 }
             }
 
@@ -213,7 +200,8 @@ namespace Jellyfin.Plugin.Addic7ed
                 if (res.StatusCode == HttpStatusCode.OK)
                 {
                     var showPattern = "<option value=\"(\\d+)\" >(.*?)</option>";
-                    var showMatches = await GetMatches(res.Content, showPattern).ConfigureAwait(false);
+                    var content = await res.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                    var showMatches = await GetMatches(content, showPattern).ConfigureAwait(false);
                     foreach (Match show in showMatches)
                     {
                         if (!shows.ContainsKey(show.Groups[2].Value))
@@ -233,12 +221,13 @@ namespace Jellyfin.Plugin.Addic7ed
                            .Where(i => i.Language.Equals(language));
         }
 
-        private async Task<IEnumerable<Addic7edResult>> ParseEpisode(HttpResponseInfo res)
+        private async Task<IEnumerable<Addic7edResult>> ParseEpisode(HttpResponseMessage res)
         {
             var trPattern = "<tr class=\"epeven completed\">(.*?)</tr>";
             var tdPattern = "<td.*?>(.*?)</td>";
 
-            var trMatches = await GetMatches(res.Content, trPattern).ConfigureAwait(false);
+            var content = await res.Content.ReadAsStreamAsync().ConfigureAwait(false);
+            var trMatches = await GetMatches(content, trPattern).ConfigureAwait(false);
             var episodes = new List<Addic7edResult>();
             foreach (Match tr in trMatches)
             {
@@ -280,7 +269,8 @@ namespace Jellyfin.Plugin.Addic7ed
             using (var res = await GetResponse($"srch.php?search={name}&Submit=Search", cancellationToken).ConfigureAwait(false))
             {
                 var aPattern = "<a href=\"movie/(\\d+)\" debug=\"\\d+\">(.*?)</a><";
-                var aMatches = await GetMatches(res.Content, aPattern).ConfigureAwait(false);
+                var content = await res.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                var aMatches = await GetMatches(content, aPattern).ConfigureAwait(false);
                 var movies = new Dictionary<string, string>();
                 foreach (Match a in aMatches)
                 {
@@ -303,7 +293,8 @@ namespace Jellyfin.Plugin.Addic7ed
                 var langPattern = "class=\"language\">(.*?)<";
                 var downPattern = "<a class=\"buttonDownload\" href=\"/(.*?)\">";
 
-                var matches = await GetMatches(res.Content, new[] { verPattern, langPattern, downPattern, titlePattern }).ConfigureAwait(false);
+                var content = await res.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                var matches = await GetMatches(content, new[] { verPattern, langPattern, downPattern, titlePattern }).ConfigureAwait(false);
 
                 var results = new List<Addic7edResult>();
                 for (int i = 0; i < matches.FirstOrDefault().Count; i++)

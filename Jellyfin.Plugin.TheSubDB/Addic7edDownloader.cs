@@ -17,7 +17,6 @@ using Jellyfin.Plugin.TheSubDB.Helpers;
 using Jellyfin.Plugin.TheSubDB.Http;
 using MediaBrowser.Common;
 using MediaBrowser.Common.Extensions;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
@@ -25,9 +24,7 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Net;
 using MediaBrowser.Model.Providers;
-using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.TheSubDB
@@ -41,25 +38,23 @@ namespace Jellyfin.Plugin.TheSubDB
         private DateTime _lastRateLimitException;
         private DateTime _lastLogin;
         private int _rateLimitLeft = 40;
-        private readonly IHttpClient _httpClient;
+        private readonly HttpClient _httpClient;
         private readonly IApplicationHost _appHost;
         private ILocalizationManager _localizationManager;
       
         private readonly IServerConfigurationManager _config;
 
-        private readonly IJsonSerializer _json;
         private readonly SubDBClient _client;
 
         private readonly string _baseUrl = "https://www.addic7ed.com";
      
-        public Addic7edDownloader(ILogger<Addic7edDownloader> logger, IHttpClient httpClient, IServerConfigurationManager config, IJsonSerializer json, IFileSystem fileSystem, ILocalizationManager localizationManager)
+        public Addic7edDownloader(ILogger<Addic7edDownloader> logger, HttpClient httpClient, IServerConfigurationManager config, IFileSystem fileSystem, ILocalizationManager localizationManager)
         {
             _logger = logger;
             _httpClient = httpClient;
 
             _client = new SubDBClient(new System.Net.Http.Headers.ProductHeaderValue("Desktop-Client", "1.0"));
             _config = config;
-            _json = json;
             _fileSystem = fileSystem;
             _localizationManager = localizationManager;
         }

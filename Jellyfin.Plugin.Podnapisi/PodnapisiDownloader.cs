@@ -5,6 +5,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,7 +13,6 @@ using System.Xml;
 using Jellyfin.Plugin.Podnapisi.Configuration;
 using MediaBrowser.Common;
 using MediaBrowser.Common.Extensions;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
@@ -20,9 +20,7 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Net;
 using MediaBrowser.Model.Providers;
-using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.Podnapisi
@@ -35,10 +33,10 @@ namespace Jellyfin.Plugin.Podnapisi
         private DateTime _lastRateLimitException;
         private DateTime _lastLogin;
         private int _rateLimitLeft = 40;
-        private readonly IHttpClient _httpClient;
+        private readonly HttpClient _httpClient;
         private readonly IApplicationHost _appHost;
         private ILocalizationManager _localizationManager;
-        public PodnapisiDownloader(ILogger<PodnapisiDownloader> logger, IFileSystem fileSystem, IHttpClient httpClient, IApplicationHost appHost, ILocalizationManager localizationManager)
+        public PodnapisiDownloader(ILogger<PodnapisiDownloader> logger, IFileSystem fileSystem, HttpClient httpClient, IApplicationHost appHost, ILocalizationManager localizationManager)
         {
             _logger = logger;
             _fileSystem = fileSystem;
@@ -59,10 +57,12 @@ namespace Jellyfin.Plugin.Podnapisi
             => new[] { VideoContentType.Episode, VideoContentType.Movie };
 
 
-        private HttpRequestOptions BaseRequestOptions => new HttpRequestOptions
+        private HttpRequestMessage CreateRequest(string url)
         {
-            UserAgent = $"Jellyfin/{_appHost.ApplicationVersion}"
-        };
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("User-Agent", $"Jellyfin/{_appHost.ApplicationVersion}");
+            return request;
+        }
 
         private string NormalizeLanguage(string language)
         {
@@ -83,14 +83,15 @@ namespace Jellyfin.Plugin.Podnapisi
             var pid = id.Split(',')[0];
             var title = id.Split(',')[1];
             var lang = id.Split(',')[2];
-            var opts = BaseRequestOptions;
-            opts.Url = $"https://www.podnapisi.net/{lang}/subtitles/{title}/{pid}/download";
-            _logger.LogDebug("Requesting {0}", opts.Url);
+            var url = $"https://www.podnapisi.net/{lang}/subtitles/{title}/{pid}/download";
+            _logger.LogDebug("Requesting {0}", url);
 
-            using (var response = await _httpClient.GetResponse(opts).ConfigureAwait(false))
+            using var request = CreateRequest(url);
+            using (var response = await _httpClient.SendAsync(request).ConfigureAwait(false))
             {
                 var ms = new MemoryStream();
-                var archive = new ZipArchive(response.Content);
+                var contentStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                var archive = new ZipArchive(contentStream);
 
                 await archive.Entries.FirstOrDefault().Open().CopyToAsync(ms).ConfigureAwait(false);
                 ms.Position = 0;
@@ -139,15 +140,16 @@ namespace Jellyfin.Plugin.Podnapisi
                 url.Append($"&sY={request.ProductionYear}");
             }
 
-            var opts = BaseRequestOptions;
-            opts.Url = url.ToString();
-            _logger.LogDebug("Requesting {0}", opts.Url);
+            var requestUrl = url.ToString();
+            _logger.LogDebug("Requesting {0}", requestUrl);
 
             try
             {
-                using (var response = await _httpClient.GetResponse(opts).ConfigureAwait(false))
+                using var request = CreateRequest(requestUrl);
+                using (var response = await _httpClient.SendAsync(request).ConfigureAwait(false))
                 {
-                    using (var reader = new StreamReader(response.Content))
+                    var contentStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                    using (var reader = new StreamReader(contentStream))
                     {
                         var settings = Create(false);
                         settings.CheckCharacters = false;
