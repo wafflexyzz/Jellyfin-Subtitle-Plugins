@@ -1,0 +1,184 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '6.0.x'  # Minimum version that supports .NET Standard 2.1
+  CONFIGURATION: Release
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build solution
+      run: dotnet build --configuration ${{ env.CONFIGURATION }} --no-restore
+
+    - name: Run tests
+      run: |
+        if find . -name "*.Tests.csproj" -type f | grep -q .; then
+          dotnet test --configuration ${{ env.CONFIGURATION }} --no-build --verbosity normal
+        else
+          echo "No test projects found, skipping tests"
+        fi
+
+    - name: Create plugin packages
+      run: |
+        # Create build output directory
+        mkdir -p build-output
+        
+        # Build and package each plugin
+        for plugin in Jellyfin.Plugin.OpenSubtitles Jellyfin.Plugin.Addic7ed Jellyfin.Plugin.Podnapisi Jellyfin.Plugin.TheSubDB Jellyfin.Plugin.Subscene; do
+          echo "Building $plugin..."
+          
+          # Publish the plugin
+          dotnet publish $plugin/$plugin.csproj \
+            --configuration ${{ env.CONFIGURATION }} \
+            --no-restore \
+            --output temp-output/$plugin
+          
+          # Copy only the necessary DLLs (excluding Jellyfin assemblies)
+          mkdir -p build-output/$plugin
+          cp temp-output/$plugin/$plugin.dll build-output/$plugin/
+          
+          # Copy OpenSubtitlesHandler.dll if needed (for OpenSubtitles plugin)
+          if [ "$plugin" = "Jellyfin.Plugin.OpenSubtitles" ]; then
+            cp temp-output/$plugin/OpenSubtitlesHandler.dll build-output/$plugin/ || true
+          fi
+          
+          # Create a ZIP package
+          cd build-output/$plugin
+          zip -r ../$plugin.zip .
+          cd ../..
+        done
+        
+        # List created packages
+        ls -la build-output/*.zip
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: plugin-packages
+        path: build-output/*.zip
+        retention-days: 30
+
+    - name: Upload individual plugin artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: plugin-dlls
+        path: build-output/*/
+        retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: plugin-packages
+        path: release-packages
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release-packages/*.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## Jellyfin Subtitle Plugins Release ${{ github.ref_name }}
+          
+          ### Available Plugins
+          - **Jellyfin.Plugin.OpenSubtitles.zip** - OpenSubtitles.org provider
+          - **Jellyfin.Plugin.Addic7ed.zip** - Addic7ed provider
+          - **Jellyfin.Plugin.Podnapisi.zip** - Podnapisi.net provider
+          - **Jellyfin.Plugin.TheSubDB.zip** - TheSubDB provider
+          - **Jellyfin.Plugin.Subscene.zip** - Subscene provider
+          
+          ### Installation Instructions
+          1. Download the desired plugin ZIP file from the assets below
+          2. Extract the contents to your Jellyfin plugins directory:
+             - Linux: `~/.local/share/jellyfin/plugins/[PluginName]/`
+             - Windows: `%AppData%\Jellyfin\Server\plugins\[PluginName]\`
+             - Docker: `/config/plugins/[PluginName]/`
+          3. Restart Jellyfin server
+          4. Configure the plugin in Dashboard → Plugins → [PluginName]
+          
+          ### Requirements
+          - Jellyfin Server 10.6.0 or later
+          - Each plugin may require API keys or authentication (configure in plugin settings)
+
+  validate-manifests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Validate build.yaml
+      run: |
+        if [ -f build.yaml ]; then
+          echo "Validating build.yaml..."
+          # Check for required fields
+          for field in name guid version targetAbi owner overview description category artifacts; do
+            if ! grep -q "^${field}:" build.yaml; then
+              echo "::error::Missing required field '${field}' in build.yaml"
+              exit 1
+            fi
+          done
+          echo "build.yaml validation passed"
+        else
+          echo "::warning::No build.yaml found in repository root"
+        fi
+
+    - name: Check plugin GUIDs
+      run: |
+        echo "Checking plugin GUIDs match between Plugin.cs and build.yaml..."
+        
+        # Extract GUID from build.yaml if it exists
+        if [ -f build.yaml ]; then
+          BUILD_GUID=$(grep "^guid:" build.yaml | cut -d'"' -f2)
+          echo "build.yaml GUID: $BUILD_GUID"
+          
+          # Find and check Plugin.cs files
+          for plugin_file in */Plugin.cs; do
+            if [ -f "$plugin_file" ]; then
+              # Extract GUID from Plugin.cs
+              PLUGIN_GUID=$(grep -E "Guid\.Parse\(\"[^\"]+\"\)" "$plugin_file" | grep -oE "[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}" || true)
+              
+              if [ -n "$PLUGIN_GUID" ]; then
+                echo "$plugin_file GUID: $PLUGIN_GUID"
+                
+                # Only check OpenSubtitles plugin GUID against build.yaml
+                if [[ "$plugin_file" == *"OpenSubtitles"* ]] && [ "$PLUGIN_GUID" != "$BUILD_GUID" ]; then
+                  echo "::warning::GUID mismatch between $plugin_file and build.yaml"
+                fi
+              fi
+            fi
+          done
+        fi

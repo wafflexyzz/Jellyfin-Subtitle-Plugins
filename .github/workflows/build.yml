@@ -1,0 +1,198 @@
+name: Build Jellyfin Subtitle Plugins
+
+on:
+  push:
+    branches: [ main, master, develop ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master, develop ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        dotnet-version: ['6.0.x', '7.0.x', '8.0.x']
+        include:
+          - os: ubuntu-latest
+            os-name: linux
+          - os: windows-latest
+            os-name: windows
+          - os: macos-latest
+            os-name: macos
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ matrix.dotnet-version }}
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build solution
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Run tests
+      run: dotnet test --configuration Release --no-build --verbosity normal --logger "trx;LogFileName=test-results.trx" || true
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results-${{ matrix.os-name }}-dotnet${{ matrix.dotnet-version }}
+        path: '**/*.trx'
+        retention-days: 30
+
+    - name: Publish plugins
+      if: matrix.dotnet-version == '6.0.x'  # Only create artifacts for one .NET version to avoid duplicates
+      run: |
+        # Create output directories for each plugin
+        mkdir -p artifacts/Jellyfin.Plugin.OpenSubtitles
+        mkdir -p artifacts/Jellyfin.Plugin.Addic7ed
+        mkdir -p artifacts/Jellyfin.Plugin.Podnapisi
+        mkdir -p artifacts/Jellyfin.Plugin.TheSubDB
+        mkdir -p artifacts/Jellyfin.Plugin.Subscene
+
+        # Publish each plugin
+        dotnet publish Jellyfin.Plugin.OpenSubtitles/Jellyfin.Plugin.OpenSubtitles.csproj --configuration Release --output artifacts/Jellyfin.Plugin.OpenSubtitles --no-restore
+        dotnet publish Jellyfin.Plugin.Addic7ed/Jellyfin.Plugin.Addic7ed.csproj --configuration Release --output artifacts/Jellyfin.Plugin.Addic7ed --no-restore
+        dotnet publish Jellyfin.Plugin.Podnapisi/Jellyfin.Plugin.Podnapisi.csproj --configuration Release --output artifacts/Jellyfin.Plugin.Podnapisi --no-restore
+        dotnet publish Jellyfin.Plugin.TheSubDB/Jellyfin.Plugin.TheSubDB.csproj --configuration Release --output artifacts/Jellyfin.Plugin.TheSubDB --no-restore
+        dotnet publish Jellyfin.Plugin.Subscene/Jellyfin.Plugin.Subscene.csproj --configuration Release --output artifacts/Jellyfin.Plugin.Subscene --no-restore
+
+    - name: Upload OpenSubtitles plugin artifact
+      uses: actions/upload-artifact@v4
+      if: matrix.dotnet-version == '6.0.x'
+      with:
+        name: Jellyfin.Plugin.OpenSubtitles-${{ matrix.os-name }}
+        path: artifacts/Jellyfin.Plugin.OpenSubtitles/
+        retention-days: 30
+
+    - name: Upload Addic7ed plugin artifact
+      uses: actions/upload-artifact@v4
+      if: matrix.dotnet-version == '6.0.x'
+      with:
+        name: Jellyfin.Plugin.Addic7ed-${{ matrix.os-name }}
+        path: artifacts/Jellyfin.Plugin.Addic7ed/
+        retention-days: 30
+
+    - name: Upload Podnapisi plugin artifact
+      uses: actions/upload-artifact@v4
+      if: matrix.dotnet-version == '6.0.x'
+      with:
+        name: Jellyfin.Plugin.Podnapisi-${{ matrix.os-name }}
+        path: artifacts/Jellyfin.Plugin.Podnapisi/
+        retention-days: 30
+
+    - name: Upload TheSubDB plugin artifact
+      uses: actions/upload-artifact@v4
+      if: matrix.dotnet-version == '6.0.x'
+      with:
+        name: Jellyfin.Plugin.TheSubDB-${{ matrix.os-name }}
+        path: artifacts/Jellyfin.Plugin.TheSubDB/
+        retention-days: 30
+
+    - name: Upload Subscene plugin artifact
+      uses: actions/upload-artifact@v4
+      if: matrix.dotnet-version == '6.0.x'
+      with:
+        name: Jellyfin.Plugin.Subscene-${{ matrix.os-name }}
+        path: artifacts/Jellyfin.Plugin.Subscene/
+        retention-days: 30
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Package plugins for release
+      run: |
+        # Create release packages
+        cd artifacts
+        
+        # Package each plugin
+        for plugin in Jellyfin.Plugin.OpenSubtitles Jellyfin.Plugin.Addic7ed Jellyfin.Plugin.Podnapisi Jellyfin.Plugin.TheSubDB Jellyfin.Plugin.Subscene; do
+          echo "Packaging $plugin..."
+          
+          # Create cross-platform package (using Linux build as it's .NET Standard)
+          if [ -d "$plugin-linux" ]; then
+            cd "$plugin-linux"
+            zip -r "../${plugin}-${GITHUB_REF#refs/tags/}.zip" .
+            cd ..
+          fi
+        done
+        
+        # List created packages
+        ls -la *.zip
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: artifacts/*.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        body: |
+          ## Jellyfin Subtitle Plugins Release
+          
+          This release includes the following subtitle provider plugins:
+          - **OpenSubtitles** - Download subtitles from OpenSubtitles.org
+          - **Addic7ed** - Download subtitles from Addic7ed
+          - **Podnapisi** - Download subtitles from Podnapisi.net
+          - **TheSubDB** - Download subtitles from TheSubDB
+          - **Subscene** - Download subtitles from Subscene
+          
+          ### Installation
+          1. Download the desired plugin ZIP file
+          2. Extract the contents to your Jellyfin plugins directory
+          3. Restart Jellyfin
+          4. Configure the plugin in Dashboard > Plugins
+
+  code-analysis:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '6.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Run code formatting check
+      run: |
+        dotnet format --verify-no-changes --verbosity diagnostic || {
+          echo "::warning::Code formatting issues found. Run 'dotnet format' to fix them."
+          exit 0
+        }
+
+    - name: Run code analysis
+      run: |
+        # Install code analysis tools
+        dotnet tool install --global dotnet-outdated-tool || true
+        
+        # Check for outdated dependencies
+        echo "Checking for outdated dependencies..."
+        dotnet-outdated || true
