@@ -35,11 +35,16 @@ namespace Jellyfin.Plugin.TheSubDB
         private static readonly CultureInfo _usCulture = CultureInfo.ReadOnly(new CultureInfo("en-US"));
         private readonly ILogger<Addic7edDownloader> _logger;
         private readonly IFileSystem _fileSystem;
+        // These fields are preserved for future rate limiting implementation
+        #pragma warning disable CS0169, CS0414
         private DateTime _lastRateLimitException;
         private DateTime _lastLogin;
         private int _rateLimitLeft = 40;
+        #pragma warning restore CS0169, CS0414
         private readonly HttpClient _httpClient;
+#pragma warning disable CS0169
         private readonly IApplicationHost _appHost;
+        #pragma warning restore CS0169
         private ILocalizationManager _localizationManager;
       
         private readonly IServerConfigurationManager _config;
@@ -99,10 +104,10 @@ namespace Jellyfin.Plugin.TheSubDB
 
         public void Dispose()
         {
-            
+            // No resources to dispose
         }
 
-        public async Task<IEnumerable<RemoteSubtitleInfo>> Search(SubtitleSearchRequest request, CancellationToken cancellationToken)
+        public Task<IEnumerable<RemoteSubtitleInfo>> Search(SubtitleSearchRequest request, CancellationToken cancellationToken)
         {
             throw new NotImplementedException();
         }

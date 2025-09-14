@@ -30,9 +30,12 @@ namespace Jellyfin.Plugin.Podnapisi
         private static readonly CultureInfo _usCulture = CultureInfo.ReadOnly(new CultureInfo("en-US"));
         private readonly ILogger<PodnapisiDownloader> _logger;
         private readonly IFileSystem _fileSystem;
+        // These fields are preserved for future rate limiting implementation
+        #pragma warning disable CS0169, CS0414
         private DateTime _lastRateLimitException;
         private DateTime _lastLogin;
         private int _rateLimitLeft = 40;
+        #pragma warning restore CS0169, CS0414
         private readonly HttpClient _httpClient;
         private readonly IApplicationHost _appHost;
         private ILocalizationManager _localizationManager;
@@ -145,8 +148,8 @@ namespace Jellyfin.Plugin.Podnapisi
 
             try
             {
-                using var request = CreateRequest(requestUrl);
-                using (var response = await _httpClient.SendAsync(request).ConfigureAwait(false))
+                using var httpRequest = CreateRequest(requestUrl);
+                using (var response = await _httpClient.SendAsync(httpRequest).ConfigureAwait(false))
                 {
                     var contentStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
                     using (var reader = new StreamReader(contentStream))
@@ -165,14 +168,10 @@ namespace Jellyfin.Plugin.Podnapisi
                     }
                 }
             }
-            catch (HttpException ex)
+            catch (HttpRequestException ex)
             {
-                if (ex.StatusCode.HasValue && ex.StatusCode.Value == HttpStatusCode.NotFound)
-                {
-                    return new List<RemoteSubtitleInfo>();
-                }
-
-                throw;
+                _logger.LogError(ex, "HTTP request failed");
+                return new List<RemoteSubtitleInfo>();
             }
         }
 

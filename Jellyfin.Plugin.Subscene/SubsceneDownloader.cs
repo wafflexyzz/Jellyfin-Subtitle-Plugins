@@ -15,7 +15,6 @@ using System.Xml;
 using Jellyfin.Plugin.Subscene.Configuration;
 using MediaBrowser.Common;
 using MediaBrowser.Common.Extensions;
-using MediaBrowser.Common.Net;
 using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Subtitles;
@@ -23,9 +22,7 @@ using MediaBrowser.Model.Dto;
 using MediaBrowser.Model.Entities;
 using MediaBrowser.Model.Globalization;
 using MediaBrowser.Model.IO;
-using MediaBrowser.Model.Net;
 using MediaBrowser.Model.Providers;
-using MediaBrowser.Model.Serialization;
 using Microsoft.Extensions.Logging;
 
 namespace Jellyfin.Plugin.Subscene
@@ -49,26 +46,24 @@ namespace Jellyfin.Plugin.Subscene
         public int Order => 3;
 
 
-        private readonly IHttpClient _httpClient;
+        private readonly HttpClient _httpClient;
         private readonly ILogger<SubsceneDownloader> _logger;
         private readonly IApplicationHost _appHost;
         private readonly ILocalizationManager _localizationManager;
-        private readonly IJsonSerializer _jsonSerializer;
-
-        public SubsceneDownloader(IHttpClient httpClient, ILogger<SubsceneDownloader> logger, IApplicationHost appHost
-            , ILocalizationManager localizationManager, IJsonSerializer jsonSerializer)
+        public SubsceneDownloader(HttpClient httpClient, ILogger<SubsceneDownloader> logger, IApplicationHost appHost, ILocalizationManager localizationManager)
         {
             _httpClient = httpClient;
             _logger = logger;
             _appHost = appHost;
             _localizationManager = localizationManager;
-            _jsonSerializer = jsonSerializer;
         }
 
-        private HttpRequestOptions BaseRequestOptions => new HttpRequestOptions
+        private HttpRequestMessage CreateRequest(string url)
         {
-            UserAgent = $"Jellyfin/{_appHost.ApplicationVersion}"
-        };
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            request.Headers.Add("User-Agent", $"Jellyfin/{_appHost.ApplicationVersion}");
+            return request;
+        }
 
         public async Task<SubtitleResponse> GetSubtitles(string id, CancellationToken cancellationToken)
         {
@@ -93,17 +88,18 @@ namespace Jellyfin.Plugin.Subscene
 
             _logger?.LogDebug($"Subscene= Downloading subtitle= {downloadLink}");
 
-            var opts = BaseRequestOptions;
-            opts.Url = $"{Domain}/{downloadLink}";
-
+            var url = $"{Domain}/{downloadLink}";
+            using var request = CreateRequest(url);
+            
             var ms = new MemoryStream();
             var fileExt = string.Empty;
             try
             {
-                using (var response = await _httpClient.GetResponse(opts).ConfigureAwait(false))
+                using (var response = await _httpClient.SendAsync(request).ConfigureAwait(false))
                 {
-                    _logger?.LogInformation("Subscene=" + response.ContentType);
-                    var contentType = response.ContentType.ToLower();
+                    var contentTypeValue = response.Content.Headers.ContentType?.MediaType ?? "";
+                    _logger?.LogInformation("Subscene=" + contentTypeValue);
+                    var contentType = contentTypeValue.ToLower();
                     if (!contentType.Contains("zip"))
                     {
                         return new SubtitleResponse()
@@ -112,7 +108,8 @@ namespace Jellyfin.Plugin.Subscene
                         };
                     }
 
-                    var archive = new ZipArchive(response.Content);
+                    var contentStream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
+                    var archive = new ZipArchive(contentStream);
 
                     var item = (archive.Entries.Count > 1
                         ? archive.Entries.FirstOrDefault(a => a.FullName.ToLower().Contains("utf"))

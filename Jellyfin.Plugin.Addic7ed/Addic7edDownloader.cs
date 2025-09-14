@@ -34,11 +34,16 @@ namespace Jellyfin.Plugin.Addic7ed
         private static readonly CultureInfo _usCulture = CultureInfo.ReadOnly(new CultureInfo("en-US"));
         private readonly ILogger<Addic7edDownloader> _logger;
         private readonly IFileSystem _fileSystem;
+        // These fields are preserved for future rate limiting implementation
+        #pragma warning disable CS0169, CS0414
         private DateTime _lastRateLimitException;
         private DateTime _lastLogin;
         private int _rateLimitLeft = 40;
+        #pragma warning restore CS0169, CS0414
         private readonly HttpClient _httpClient;
+#pragma warning disable CS0169
         private readonly IApplicationHost _appHost;
+        #pragma warning restore CS0169
         private ILocalizationManager _localizationManager;
       
         private readonly IServerConfigurationManager _config;
@@ -410,13 +415,13 @@ namespace Jellyfin.Plugin.Addic7ed
             var language = idParts[1];
             var format = "srt";
 
-            using (var stream = await GetResponse(download, cancellationToken).ConfigureAwait(false))
+            using (var response = await GetResponse(download, cancellationToken).ConfigureAwait(false))
             {
-                if (string.IsNullOrWhiteSpace(stream.ContentType) ||
-                    stream.ContentType.Contains(format))
+                var contentType = response.Content.Headers.ContentType?.MediaType ?? "";
+                if (string.IsNullOrWhiteSpace(contentType) || contentType.Contains(format))
                 {
                     var ms = new MemoryStream();
-                    await stream.Content.CopyToAsync(ms).ConfigureAwait(false);
+                    await response.Content.CopyToAsync(ms).ConfigureAwait(false);
                     ms.Position = 0;
                     return new SubtitleResponse()
                     {
